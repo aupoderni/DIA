@@ -345,31 +345,37 @@ class Spytrometer:
     def Dalton2bin(self, mass, charge=1):  # convert to bin
         return int(mass / (charge * self.bin_width))
 
-    def load_dia_data(self, path_to_file, min_peak_th=10):
+    def load_dia_data(self, path_to_file, precursor_mass, min_peak_th=10):
         print("Loading spectrum data...")
         start_time = datetime.now()
         self.spectrum_collection = []
         spectra = list(mzml.read(path_to_file))
-        for i in range(1, len(spectra), 41):
-            spectrum_record = Spectrum(
-                        path_to_file,  # path to file
-                        int(spectra[i]["index"]),  # scan_id
-                        np.float_(spectra[i]["m/z array"][:]),  # mz array
-                        np.float_(spectra[i]["intensity array"][:]),  # intensity array
-                        int(
-                            1
-                        ),  # charge
-                        float(
-                            spectra[i]["precursorList"]["precursor"][0][
-                                "selectedIonList"
-                            ]["selectedIon"][0]["selected ion m/z"]
-                        ),  # precursor mass
-                        self.max_peak,
-                        self.remove_precursor_peak,
-                        self.remove_precursor_tolerance,
-                    )
-            if len(spectrum_record.intensity_array) >= min_peak_th:
-                self.spectrum_collection.append(spectrum_record)
+        for spectrum in spectra:
+            try:
+                prec_mass = spectrum["precursorList"]["precursor"][0][
+                    "selectedIonList"]["selectedIon"][0]["selected ion m/z"]
+                if (prec_mass == precursor_mass):
+                    spectrum_record = Spectrum(
+                                path_to_file,  # path to file
+                                int(spectrum["index"]),  # scan_id
+                                np.float_(spectrum["m/z array"][:]),  # mz array
+                                np.float_(spectrum["intensity array"][:]),  # intensity array
+                                int(
+                                    1
+                                ),  # charge
+                                float(
+                                    spectrum["precursorList"]["precursor"][0][
+                                        "selectedIonList"
+                                    ]["selectedIon"][0]["selected ion m/z"]
+                                ),  # precursor mass
+                                self.max_peak,
+                                self.remove_precursor_peak,
+                                self.remove_precursor_tolerance,
+                            )
+                    if len(spectrum_record.intensity_array) >= min_peak_th:
+                        self.spectrum_collection.append(spectrum_record)
+            except:
+                continue
         self.set_spectrum_idx()
         print(
             "Done. Time (h:m:s):\t" + str(datetime.now() - start_time)
