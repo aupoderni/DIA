@@ -545,7 +545,12 @@ class Spytrometer:
             )
         )
         
-        
+    def get_spectrum_by_scan(self, scan):
+        """Getting spectrum by scan_id"""
+        for cnt, spectrum in enumerate(self.spectrum_collection):
+            if spectrum.scan_id == scan:
+                return cnt
+
     def reset_search_results(self):
         for spectrum in self.spectrum_collection:
             spectrum.score = (
@@ -1025,8 +1030,8 @@ class Spytrometer:
         spectrum = self.spectrum_collection[spectrum_id]
         min_y = np.min((np.min(spectrum.spectrum_array), 0))
         max_y = np.max(spectrum.spectrum_array)
-        min_x = 0 # np.min(np.nonzero(spectrum.spectrum_array))-1
-        max_x = 2000 # np.max(np.nonzero(spectrum.spectrum_array))+1
+        min_x = 0#np.min(np.nonzero(spectrum.spectrum_array))-1
+        max_x = 2000#np.max(np.nonzero(spectrum.spectrum_array))+1
 
         plt.xlim(min_x, max_x)
         range_y = max_y - min_y
@@ -1050,7 +1055,7 @@ class Spytrometer:
         plt.yticks((0.0, 0.5, 1.0))
 
         if show_annotation == True:
-            peptide = spectrum.peptide
+            peptide = peptide_seq
 
             print(
                 "Seq:{}  Charge:{}   Mass: {}".format(
@@ -1059,9 +1064,9 @@ class Spytrometer:
             )
             cnt = 1
             # Line for b fragments
-            # plt.plot([min_x, max_x],[max_y+range_y*0.1,max_y+range_y*0.1], linewidth=line_width)
+            #plt.plot([min_x, max_x],[max_y+range_y*0.1,max_y+range_y*0.1], linewidth=line_width)
             # Line for y fragments
-            # plt.plot([min_x, max_x],[max_y+range_y*0.2,max_y+range_y*0.2], linewidth=line_width)
+            #plt.plot([min_x, max_x],[max_y+range_y*0.2,max_y+range_y*0.2], linewidth=line_width)
             for charge in range(len(peptide.peaks)):
                 # Use theoretical peaks which were used in scoring
                 if spectrum.charge < 3 and charge > 0:
