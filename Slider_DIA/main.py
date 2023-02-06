@@ -5,6 +5,7 @@ import numpy as np
 import source.Spytrometer as Spytrometer
 import source.models as models
 import source.parameters as params
+import source.visualization as visual
 import time 
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -86,17 +87,23 @@ for scan in data_percolator['scan']:
 
 X = torch.tensor(np.stack(x, axis=0), dtype=torch.float)
 Y = torch.tensor(np.stack(y, axis=0), dtype=torch.float)
+X = X.unsqueeze(1)
+Y = Y.unsqueeze(1)
 
-print('Training data shapes: ', X.shape, Y.shape)
-train_data = TensorDataset(X, Y)
-train_loader = DataLoader(train_data, shuffle=True, batch_size=16)
 
 #Training parameters
-window_width = 20
-batch_size = training_parameters['batch_size']
-kernel_num = training_parameters['kernel_num']
-clip_value = training_parameters['clip_value']
-spectrum_size = spy.max_bin
+window_width = training_parameters['window_width']
+batch_size = training_parameters['batch_size'] #16
+kernel_num = training_parameters['kernel_num'] #20
+num_epochs = training_parameters['epochs'] #20
+clip_value = training_parameters['clip_value'] #1
+print_info = training_parameters['print_info'] #True
+printing_tick = training_parameters['printing_tick'] #1
+spectrum_size = spy.max_bin #1999
+print(spectrum_size)
+
+train_data = TensorDataset(X, Y)
+train_loader = DataLoader(train_data, shuffle=True, batch_size=batch_size)
 
 conv_net = models.DeepConv(window_width=window_width, kernel_num=kernel_num, spectrum_size=spectrum_size, torch_device=torch_device, torch_type=torch_type)
 conv_net = conv_net.to(torch_device)
@@ -111,10 +118,6 @@ xent = models.BCELossWeight(pos_weight=torch.tensor(20, dtype=torch.float, devic
 
 start_time = time.time()
 learning_curve = []
-num_epochs = training_parameters['epochs']
-clip_value = training_parameters['clip_value']
-print_info = training_parameters['print_info']
-printing_tick = training_parameters['printing_tick']
 
 for epoch in range(num_epochs):
     partial_loss = 0
@@ -124,7 +127,7 @@ for epoch in range(num_epochs):
         output = conv_net(x_train)
         loss = xent(output, y_train)
         loss.backward()
-        #conv_net.clip_grads(clip_value=clip_value)
+        conv_net.clip_grads(clip_value=clip_value)
         optimizer.step()
         partial_loss += loss
         batch_cnt += 1
@@ -134,3 +137,5 @@ for epoch in range(num_epochs):
         print("Epoch: {}/{}. Time: {}, loss:{}".format(epoch+1, num_epochs, round(time.time()-start_time, 2), epoch_error))
 
 Info("Learning done. Time: {} sec.".format(round(time.time()-start_time, 2)), show=print_info)
+filename_curve = str(num_epochs) + '_ep_batch_' + str(batch_size)
+visual.plot_learning_curve(learning_curve, filename_curve)
