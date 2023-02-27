@@ -17,22 +17,24 @@ class DeepConv(torch.nn.Module):
         in_channels = 1
         
         self.layer1 = torch.nn.Sequential(
-            torch.nn.BatchNorm1d(num_features=1),
-            torch.nn.Conv1d(in_channels, self.kernel_num, self.window_width*2+1, padding=self.window_width, bias=bias),
-            torch.nn.BatchNorm1d(num_features=self.kernel_num),
+            torch.nn.BatchNorm2d(num_features=1), # num_features = channels
+            torch.nn.Conv2d(in_channels, self.kernel_num, kernel_size=(3, self.window_width*2+1), padding=(1, self.window_width), bias=bias),
+            torch.nn.BatchNorm2d(num_features=self.kernel_num),
             torch.nn.Sigmoid(),
             )
             
         self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv1d(self.kernel_num, 1, 1, padding=0, bias=bias),
-            torch.nn.BatchNorm1d(num_features=1),
+            torch.nn.Conv2d(self.kernel_num, 1, 1, padding=0, bias=bias),
+            torch.nn.BatchNorm2d(num_features=1),
             )
-        self.bias =  torch.nn.Parameter(torch.tensor(5.0, requires_grad=True))#   nn.Parameters(torch.zeros(1))
+        self.bias =  torch.nn.Parameter(torch.tensor(5.0, requires_grad=True))# nn.Parameters(torch.zeros(1))
         self.offset = torch.tensor(0.0/self.kernel_num)
 
     def forward(self, x):
         out = self.layer1(x) - self.offset   # shape: [batch_size, channel, spectrum_bin]
-        out = self.layer2(out) - self.offset - self.bias
+        out = self.layer2(out)
+        pooling = torch.nn.MaxPool2d((out.shape[2], 1), stride=1)
+        out = pooling(out) - self.offset - self.bias
         return self.sigmoid(out)
     
     def clip_grads(self, clip_value=0.0001):
