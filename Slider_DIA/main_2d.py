@@ -7,7 +7,6 @@ import source.models as models
 import source.parameters as params
 import source.visualization as visual
 import time 
-from torch.utils.data import DataLoader, TensorDataset
 import random
 
 torch.set_num_threads(4)
@@ -105,10 +104,9 @@ for epoch in range(num_epochs):
     # For each theoretical spectrum
     for idx in random_index:
         # y - one theoretical spectrum
-        y = []
-        train_data = data_percolator.loc[data_percolator['sequence'] == target_peptide[idx]]
-        y.append(target_binary[idx])
+        y = target_binary[idx]
         # x - all experimental spectra that corresponds to y
+        train_data = data_percolator.loc[data_percolator['sequence'] == target_peptide[idx]]
         x = []
         for scan in train_data['scan']:
             spectrum_idx = spy.get_spectrum_by_scan(scan - 1)
@@ -120,24 +118,22 @@ for epoch in range(num_epochs):
         Y = Y.unsqueeze(0) # 1 x 1 x 1999
         X = X.unsqueeze(0) # 1 x 1 x scans x 1999
         Y = Y.unsqueeze(0) # 1 x 1 x 1 x 1999
-        train_data = TensorDataset(X, Y)
-        train_loader = DataLoader(train_data)
-        for x_train, y_train in train_loader:
-            output = conv_net(x_train) # 1 x 1 x 1 x 1999
-            loss = xent(output, y_train)
-            loss.backward()
-            conv_net.clip_grads(clip_value=clip_value)
-            optimizer.step()
-            optimizer.zero_grad()
+
+        output = conv_net(X) # 1 x 1 x 1 x 1999
+        loss = xent(output, Y)
+        loss.backward()
+        conv_net.clip_grads(clip_value=clip_value)
+        optimizer.step()
+        optimizer.zero_grad()
         partial_loss += loss
         batch_cnt += 1
-    print(x_train.size(), ' - training data size')
+    print(X.size(), ' - training data size')
     print(output.size(), ' - size of output')
     epoch_error = (partial_loss/batch_cnt).data.cpu().numpy()
     learning_curve.append(epoch_error)
     if (epoch+1)%printing_tick == 0 or epoch == 0:
         print("Epoch: {}/{}. Time: {}, loss:{}".format(epoch+1, num_epochs, round(time.time()-start_time, 2), epoch_error))
-
+torch.save(conv_net, 'Slider_DIA.pth')
 Info("Learning done. Time: {} sec.".format(round(time.time()-start_time, 2)), show=print_info)
-filename_curve = str(num_epochs) + '_ep_batch_'
+filename_curve = str(num_epochs) + '_ep'
 visual.plot_learning_curve(learning_curve, filename_curve)
