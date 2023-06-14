@@ -149,7 +149,7 @@ class Spytrometer:
         self,
         bin_width=1.0005079,
         bin_offset=0.4,
-        remove_precursor_peak=False,
+        remove_precursor_peak=True,
         remove_precursor_tolerance=1.5,
         max_peak=2000,
         skip_preprocessing=False,
@@ -346,40 +346,6 @@ class Spytrometer:
     def Dalton2bin(self, mass, charge=1):  # convert to bin
         return int(mass / (charge * self.bin_width))
 
-    def load_dia_data(self, path_to_file, precursor_mass = None, min_peak_th=10):
-        print("Loading spectrum data...")
-        start_time = datetime.now()
-        self.spectrum_collection = []
-        spectra = list(mzml.read(path_to_file))
-        for spectrum in spectra:
-            try:
-                prec_mass = spectrum["precursorList"]["precursor"][0][
-                    "selectedIonList"]["selectedIon"][0]["selected ion m/z"]
-                if (prec_mass == precursor_mass or precursor_mass == None):
-                    spectrum_record = Spectrum(
-                        path_to_file,  # path to file
-                        int(spectrum["index"]),  # scan_id
-                        np.float_(spectrum["m/z array"][:]),  # mz array
-                        np.float_(spectrum["intensity array"][:]),  # intensity array
-                        None,  # charge
-                        float(
-                            spectrum["precursorList"]["precursor"][0][
-                                    "selectedIonList"
-                                ]["selectedIon"][0]["selected ion m/z"]
-                            ),  # precursor mass
-                        self.max_peak,
-                        self.remove_precursor_peak,
-                        self.remove_precursor_tolerance,
-                        )
-                    if len(spectrum_record.intensity_array) >= min_peak_th:
-                        self.spectrum_collection.append(spectrum_record)
-            except:
-                continue
-        self.set_spectrum_idx()
-        print(
-            "Done. Time (h:m:s):\t" + str(datetime.now() - start_time)
-        )  # Print out the total number of the proteins
-
     def load_data(self, path_to_file, min_peak_th=10, data_type="humvar"):
         print("Loading spectrum data...")
         start_time = datetime.now()
@@ -487,7 +453,7 @@ class Spytrometer:
     def discretize_spectrum(self, spectrum_id):
 
         spectrum = self.spectrum_collection[spectrum_id]
-        spectrum.spectrum_array = np.zeros(self.max_bin)
+        spectrum.spectrum_array = np.zeros(self.max_bin, dtype='float32')
         spectrum.peak_bins = list(map(self.mass2bin, spectrum.mz_array))
         if not self.skip_preprocessing:
             sqrt_intensity_array = list(map(math.sqrt, spectrum.intensity_array))
@@ -1387,41 +1353,47 @@ class Spytrometer:
                     fp.write('%f %f\n'%(peak,peak_intensity))
         fp.close()
 
+    def get_peaks_mz_intensity(self, spectrum):
+        mz = []
+        intensity = []
+        peak_bin_idx = np.nonzero(spectrum.spectrum_array)[0]
+        bin_to_peak = [self.bin2mass(peak_bin)+self.bin_width/2 for peak_bin in peak_bin_idx]
+        for i, peak in enumerate(bin_to_peak):
+            peak_intensity = spectrum.spectrum_array[peak_bin_idx[i]]
+            if peak > 0:
+                mz.append(peak)
+                intensity.append(peak_intensity)
+        return mz, intensity
+    
+    def create_oms_spectrum(self, mz, intensity, ms_level, spectrum):
+        oms_spectrum = oms.MSSpectrum()
+        oms_spectrum.set_peaks([mz, intensity])
+        oms_spectrum.setMSLevel(ms_level)
+        oms_spectrum.setRT(spectrum.getRT())
+        oms_spectrum.setPrecursors(spectrum.getPrecursors())
+        oms_spectrum.setInstrumentSettings(spectrum.getInstrumentSettings())
+        return oms_spectrum
+
     def export_spectra_mzxml(self, filename, exp):
         """Exporting results to *.mzML format""" 
-        exp_new = oms.MSExperiment()
-        spec_cnt = 0
+        exp_outp = oms.MSExperiment()
+        ms2_spec = 0
         for cnt, _ in enumerate(exp):
             if exp[cnt].getMSLevel() == 1:
-                exp_new.addSpectrum(exp[cnt])
+                exp_outp.addSpectrum(exp[cnt])
                 continue
-            oms_spectrum = oms.MSSpectrum()
-            spectrum = self.spectrum_collection[spec_cnt]
-            mz = []
-            intensity = []
-            peak_bin_idx = np.nonzero(spectrum.spectrum_array)[0]
-            bin_to_peak = [self.bin2mass(peak_bin)+self.bin_width/2 for peak_bin in peak_bin_idx]
-            for i, peak in enumerate(bin_to_peak):
-                peak_intensity = spectrum.spectrum_array[peak_bin_idx[i]]
-                if peak > 0:
-                    mz.append(peak)
-                    intensity.append(peak_intensity)
-            oms_spectrum.set_peaks([mz, intensity])
-            oms_spectrum.setMSLevel(2)
-            oms_spectrum.setRT(exp[cnt].getRT())
-            oms_spectrum.setPrecursors(exp[cnt].getPrecursors())
+            spectrum = self.spectrum_collection[ms2_spec]
+            mz, intensity = self.get_peaks_mz_intensity(spectrum)
+            oms_spectrum = self.create_oms_spectrum(mz, intensity, 2, exp[cnt])
+            exp_outp.addSpectrum(oms_spectrum)
 
-            oms_spectrum.setInstrumentSettings(exp[cnt].getInstrumentSettings())
-
-            exp_new.addSpectrum(oms_spectrum)
-
-            if spec_cnt == 1:
+            if ms2_spec == 1:
                 print(exp[0].get_peaks()[0])
-                print(exp_new[0].get_peaks()[0])
+                print(exp_outp[0].get_peaks()[0])
                 print(exp[1].get_peaks()[0])
-                print(exp_new[1].get_peaks()[0])
-            spec_cnt += 1
-        oms.MzXMLFile().store(filename, exp_new)
+                print(exp_outp[1].get_peaks()[0])
+            ms2_spec += 1
+        oms.MzXMLFile().store(filename, exp_outp)
 
 
     def load_openms(self, exp, min_peak_th=10):
@@ -1441,12 +1413,11 @@ class Spytrometer:
                             exp[i_spectrum].getPrecursors()[0].getMZ()
                             ),  # precursor mass
                         self.max_peak,
-                        False,
+                        self.remove_precursor_peak,
                         self.remove_precursor_tolerance,
                         )
             if len(spectrum_record.intensity_array) >= min_peak_th:
                         self.spectrum_collection.append(spectrum_record)
-        #self.set_spectrum_idx()
         print(
             "Done. Time (h:m:s):\t" + str(datetime.now() - start_time)
         )  # Print out the total number of the proteins
