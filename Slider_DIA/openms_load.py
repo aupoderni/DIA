@@ -10,10 +10,11 @@ import source.parameters as params
 exp = oms.MSExperiment()
 oms.MzXMLFile().load("data\e01306.mzXML", exp)
 
-spy = Spytrometer.Spytrometer(max_peak=2000)
-bin_width = 0.02
-bin_offset = 0
-spy.tolarence_window = 20
+spy = Spytrometer.Spytrometer(max_peak=2000, bin_width=0.01, bin_offset=0.0, remove_precursor_peak=False, skip_preprocessing=True)
+
+#spy.bin_width = 0.2
+#spy.bin_offset = 0.0
+spy.tolarence_window = 10
 spy.tolerance_type = 'PPM'
 spy.max_theo_pept_peak_charge = 5
 spy.remove_precursor_peak = False
@@ -25,13 +26,12 @@ spy.unique_peptides = 1
 # Load dia data
 start_time = datetime.now()
 spy.load_openms(exp)
-
 for spectrum_id, spectrum in enumerate(spy.spectrum_collection):
     spy.discretize_spectrum(spectrum_id)
-    spy.normalize_regions(spectrum_id)
+    #spy.normalize_regions(spectrum_id)
 
 # Make a dict with precursor masses as keys and spectrum index lists with these precursor masses as values
-
+'''
 prec_masses = {}
 for i in range(len(spy.spectrum_collection)):
     if spy.spectrum_collection[i].precursor_mass not in prec_masses.keys():
@@ -54,6 +54,6 @@ for key, value in prec_masses.items():
     spectrum_collection_concat = torch.squeeze(model(X)).detach().numpy()
     for i in range(len(spectrum_collection_concat)):
         spy.spectrum_collection[value[i]].spectrum_array = spectrum_collection_concat[i].tolist()
-
+'''
 # Save new data as .mzxml file
 spy.export_spectra_mzxml('output.mzXML', exp)
